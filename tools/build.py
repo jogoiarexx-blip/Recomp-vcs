@@ -74,6 +74,9 @@ def main():
     a = ap.parse_args()
     if a.progress == "json":
         tc.set_json_progress()
+    if a.opt is None and tc.IS_MAC:
+        # ThinLTO with Apple clang (the default compiler there; Homebrew LLVM's bitcode is newer than ld64 reads)
+        a.opt = "lto"
     if a.quick:
         if a.opt not in (None, "none"):
             ap.error("--quick is --opt none; it can't be combined with --opt " + a.opt)
@@ -329,7 +332,7 @@ def train(env, verbose):
     profiles = glob.glob(os.path.join(raw, "*.profraw"))
     if not profiles:
         tc.fail("training wrote no profiles (build/pgo/raw)")
-    profdata = shutil.which("llvm-profdata", path=env.get("PATH")) or "llvm-profdata"
+    profdata = tc.profdata_tool(env)
     subprocess.check_call([profdata, "merge", "-o", PROFDATA] + profiles, env=env)
     print("[build] profile: " + tc.show(PROFDATA) + " from %d runs" % len(profiles))
 

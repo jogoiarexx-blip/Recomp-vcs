@@ -56,6 +56,9 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <climits>
 #endif
 
 #if defined(PS2X_PGO_GEN)
@@ -125,6 +128,17 @@ namespace
         const fs::path self = fs::read_symlink("/proc/self/exe", ec);
         if (!ec && !self.empty())
             return self.parent_path();
+#elif defined(__APPLE__)
+        // a .app starts with / as the working directory: vcs.ini sits next to the executable
+        char buffer[PATH_MAX];
+        uint32_t size = sizeof(buffer);
+        if (_NSGetExecutablePath(buffer, &size) == 0)
+        {
+            std::error_code ec;
+            const fs::path self = fs::weakly_canonical(buffer, ec);
+            if (!ec && !self.empty())
+                return self.parent_path();
+        }
 #endif
         return fs::current_path();
     }
@@ -137,6 +151,9 @@ namespace
 #if defined(_WIN32)
         if (const char *local = std::getenv("LOCALAPPDATA"))
             return fs::path(local) / "VCSRecomp";
+#elif defined(__APPLE__)
+        if (const char *home = std::getenv("HOME"))
+            return fs::path(home) / "Library/Application Support/VCSRecomp";
 #endif
         if (const char *xdg = std::getenv("XDG_DATA_HOME"); xdg && *xdg == '/') // absolute only (the XDG spec)
             return fs::path(xdg) / "VCSRecomp";
@@ -481,6 +498,7 @@ namespace
         s.max = 100;
         s.format = "%d%%";
         s.defaultValue = 100;
+        s.env = "VCS_VOLUME"; // test runs set it to 0 (toolchain.test_window)
         s.onChange = applyVolume;
         settings::add(s);
 
@@ -497,6 +515,7 @@ namespace
         s.max = 100;
         s.format = "%d%%";
         s.defaultValue = 100;
+        s.env = "VCS_MOVIE_VOLUME";
         s.onChange = applyVolume;
         settings::add(s);
 

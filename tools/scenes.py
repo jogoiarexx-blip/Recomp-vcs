@@ -2,7 +2,7 @@
 """Reference scenes: run the game along a fixed script, capture screenshots + perf, compare two captures.
 
     python tools/scenes.py capture OUT [--hidden]            the reference script (SCRIPT below) -> OUT/
-    python tools/scenes.py explore OUT [--seconds 120] [--every 3] [--press 40:Return,45:Shift:300] [--hidden]
+    python tools/scenes.py explore OUT [--seconds 120] [--every 3] [--press 40:Start,45:Shift:300] [--hidden]
     python tools/scenes.py compare REF NEW [--out DIR]       per-scene difference + diff images
 
 Every run starts from an empty memory card (VCS_DATA_DIR = build/scenes_data, wiped first), so the boot path is
@@ -25,6 +25,8 @@ import subprocess
 import sys
 import time
 
+START_KEY = "Escape" if sys.platform == "darwin" else "Return"
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gamectl  # noqa: E402
 import toolchain as tc  # noqa: E402
@@ -46,9 +48,9 @@ SCRIPT = [
     (88.0, "press", "Shift", False),            # Cross: skip the cutscene
     (106.0, "shot", "gameplay_hud", False),
     (108.0, "perf", "gameplay", False),
-    (110.0, "press", "Return", False),          # Start: pause menu (map)
+    (110.0, "press", START_KEY, False),          # Start: pause menu (map)
     (116.0, "shot", "pause_map", True),
-    (118.0, "press", "Return", False),
+    (118.0, "press", START_KEY, False),
     (124.0, "shot", "gameplay_resumed", False),
 ]
 STATIC_TOLERANCE = 2.0  # mean absolute difference (0-255) a static scene may have

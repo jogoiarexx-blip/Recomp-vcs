@@ -10,12 +10,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#if defined(USE_SSE2NEON)
+#include "sse2neon.h"
+#else
 #include <immintrin.h>
+#include <xmmintrin.h>
+#endif
 #include <new>
 #include <exception>
 #include <mutex>
 #include <thread>
-#include <xmmintrin.h>
 #include <cstring>  // [gta-recomp] libstdc++ (Linux) does not bring it in
 
 namespace ps2_render_worker
