@@ -71,7 +71,12 @@ namespace vcs::input
             {"cam_down", "Camera down", "Camera", Target::Stick, 0, 3, 1, KEY_K, 0, kPadNone},
             {"cam_left", "Camera left", "Camera", Target::Stick, 0, 2, -1, KEY_J, 0, kPadNone},
             {"cam_right", "Camera right", "Camera", Target::Stick, 0, 2, 1, KEY_L, 0, kPadNone},
+            // macOS: Enter selects in the game's menus as in PC GTA (Shift stays the sprint / accelerate key)
+#if defined(__APPLE__)
+            {"cross", "Cross (sprint, accelerate)", "Buttons", Target::Button, kCross, 0, 0, KEY_LEFT_SHIFT, KEY_ENTER, GAMEPAD_SOUTH},
+#else
             {"cross", "Cross (sprint, accelerate)", "Buttons", Target::Button, kCross, 0, 0, KEY_LEFT_SHIFT, 0, GAMEPAD_SOUTH},
+#endif
             {"square", "Square (jump, brake)", "Buttons", Target::Button, kSquare, 0, 0, KEY_SPACE, 0, GAMEPAD_WEST},
             {"triangle", "Triangle (enter vehicle)", "Buttons", Target::Button, kTriangle, 0, 0, KEY_F, 0, GAMEPAD_NORTH},
             {"circle", "Circle (attack)", "Buttons", Target::Button, kCircle, 0, 0, KEY_LEFT_CONTROL, KEY_MOUSE_LEFT, GAMEPAD_EAST},
@@ -79,10 +84,23 @@ namespace vcs::input
             {"r1", "R1 (target)", "Buttons", Target::Button, kR1, 0, 0, KEY_E, KEY_MOUSE_RIGHT, GAMEPAD_RIGHT_SHOULDER},
             {"l2", "L2", "Buttons", Target::Button, kL2, 0, 0, KEY_ONE, KEY_Z, kPadLT},
             {"r2", "R2", "Buttons", Target::Button, kR2, 0, 0, KEY_THREE, KEY_X, kPadRT},
+#if defined(__APPLE__)
+            {"l3", "L3 (left stick click)", "Buttons", Target::Button, kL3, 0, 0, 0, 0, GAMEPAD_LEFT_STICK},
+#else
             {"l3", "L3 (left stick click)", "Buttons", Target::Button, kL3, 0, 0, KEY_C, 0, GAMEPAD_LEFT_STICK},
+#endif
             {"r3", "R3 (right stick click)", "Buttons", Target::Button, kR3, 0, 0, KEY_V, 0, GAMEPAD_RIGHT_STICK},
+#if defined(__APPLE__)
+            {"start", "Start (pause menu)", "Buttons", Target::Button, kStart, 0, 0, KEY_ESCAPE, 0, GAMEPAD_START},
+#else
             {"start", "Start (pause menu)", "Buttons", Target::Button, kStart, 0, 0, KEY_ENTER, 0, GAMEPAD_START},
+#endif
+#if defined(__APPLE__)
+            // Select is the camera zoom (close / far): C, as in the PC games
+            {"select", "Select (camera zoom)", "Buttons", Target::Button, kSelect, 0, 0, KEY_C, 0, GAMEPAD_BACK},
+#else
             {"select", "Select", "Buttons", Target::Button, kSelect, 0, 0, KEY_BACKSPACE, 0, GAMEPAD_BACK},
+#endif
             {"dpad_up", "D-pad up", "D-pad", Target::Button, kUp, 0, 0, KEY_UP, 0, GAMEPAD_DPAD_UP},
             {"dpad_down", "D-pad down", "D-pad", Target::Button, kDown, 0, 0, KEY_DOWN, 0, GAMEPAD_DPAD_DOWN},
             {"dpad_left", "D-pad left", "D-pad", Target::Button, kLeft, 0, 0, KEY_LEFT, 0, GAMEPAD_DPAD_LEFT},
@@ -793,10 +811,15 @@ namespace vcs::input
         s.page = kKeys;
         s.section = "Menus";
         s.label = "Settings menu";
-        s.help = "Opens and closes this menu. On a gamepad: press Back + Start together.";
+        s.help = "Opens and closes this menu. On a gamepad: press Back + Start together. On macOS the default is ` "
+                 "because F2 is the brightness key; F2 still works with Fn held.";
         s.type = Type::Key;
         s.group = "keys";
+#if defined(__APPLE__)
+        s.defaultValue = KEY_GRAVE; // F2 is the brightness key on Mac keyboards
+#else
         s.defaultValue = KEY_F2;
+#endif
         settings::add(s);
 
         s = {};
@@ -804,11 +827,16 @@ namespace vcs::input
         s.page = kKeys;
         s.section = "Menus";
         s.label = "Trainer menu";
-        s.help = "Opens and closes the trainer (god mode, weapons, vehicles, teleports...). On a gamepad: press Back + RB "
-                 "together.";
+        s.help = "Opens and closes the trainer (god mode, weapons, vehicles, teleports...). On a gamepad: press Back + "
+                 "RB together. On macOS the default is \\ because F5 is the keyboard backlight key; F5 still works "
+                 "with Fn held.";
         s.type = Type::Key;
         s.group = "keys";
+#if defined(__APPLE__)
+        s.defaultValue = KEY_BACKSLASH; // F5 is the keyboard backlight key on Mac keyboards
+#else
         s.defaultValue = KEY_F5;
+#endif
         settings::add(s);
 
         s = {};

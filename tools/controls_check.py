@@ -36,7 +36,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # DualShock 2 bits (pressed), as "padstate" reports them
 SELECT, L3, R3, START, UP, RIGHT, DOWN, LEFT = 0x0001, 0x0002, 0x0004, 0x0008, 0x0010, 0x0020, 0x0040, 0x0080
 L2, R2, L1, R1, TRIANGLE, CIRCLE, CROSS, SQUARE = 0x0100, 0x0200, 0x0400, 0x0800, 0x1000, 0x2000, 0x4000, 0x8000
-KEY_G, KEY_SHIFT, KEY_WHEEL_UP, KEY_F2 = 71, 340, 405, 291
+KEY_G, KEY_SHIFT, KEY_WHEEL_UP, KEY_F2, KEY_GRAVE = 71, 340, 405, 291, 96
+# the settings menu key: backquote on Apple platforms (F2 is the brightness key there), F2 elsewhere
+MENU_KEY_DEFAULT = KEY_GRAVE if sys.platform == "darwin" else KEY_F2
 
 # control-channel key name -> what the default bindings make of it: a button bit, or (axis, byte)
 DEFAULTS = [
@@ -44,11 +46,17 @@ DEFAULTS = [
     ("i", ("ry", 0)), ("k", ("ry", 255)), ("j", ("rx", 0)), ("l", ("rx", 255)),
     ("shift", CROSS), ("rshift", CROSS), ("space", SQUARE), ("f", TRIANGLE), ("ctrl", CIRCLE), ("rctrl", CIRCLE),
     ("mouseleft", CIRCLE), ("q", L1), ("e", R1), ("mouseright", R1), ("1", L2), ("z", L2), ("3", R2), ("x", R2),
-    ("c", L3), ("v", R3), ("backspace", SELECT),
+    ("v", R3),
     ("up", UP), ("down", DOWN), ("left", LEFT), ("right", RIGHT),
 ]
-# Start opens the game's pause menu: checked last
-START_KEYS = [("return", START), ("kpenter", START)]
+# the menu keys follow the platform's defaults (vcs_input.cpp): on macOS Start is Escape, Select (camera zoom) is C,
+# Cross takes Enter and L3 is unbound; elsewhere Enter starts, Backspace selects and C is L3
+if sys.platform == "darwin":
+    DEFAULTS += [("c", SELECT), ("return", CROSS), ("kpenter", CROSS)]
+    START_KEYS = [("escape", START)]
+else:
+    DEFAULTS += [("c", L3), ("backspace", SELECT)]
+    START_KEYS = [("return", START), ("kpenter", START)]
 
 
 class Check:
@@ -120,14 +128,20 @@ class Check:
         self.ok("music / effects settings reach the game", s.get("music") == "32" and s.get("effects") == "64" and
                 prefs == "4000000020000000", "%s prefs %s" % (s, prefs))
         # loading the card's save (it holds the defaults) keeps the player's levels: pause menu > Game > Load, slot 1
-        self.keys("Return@3", "Right", "Right", "Shift@2", "Shift@3", "Down", "Shift@3", "Up", "Shift@25")
+        g.cmd("menu close")  # a settings menu left open by the rebinding checks would eat the first Escape
+        time.sleep(0.5)
+        if g.peek(0x4CD2AC, 1)[0]:  # CTimer::m_UserPause: the pause menu itself open the same way
+            self.keys("%s@2" % rig.START_KEY)
+        self.keys("%s@3" % rig.START_KEY, "Right@1", "Right@1", "Shift@2", "Shift@3", "Down@1", "Shift@3", "Up@1", "Shift@25")
         s = self.sound()
         with open(g.log_path, encoding="utf-8", errors="replace") as f:
-            loaded = "the game sets the music level 80 (ra=0x3add90): the player's 32" in f.read()
-        self.ok("a save load keeps the player's levels", loaded and s.get("music") == "32" and s.get("effects") == "64",
-                "%s, load %s" % (s, "seen" if loaded else "not seen"))
+            # the level in the card is the player's (a rig card has 80, a save made in game usually differs): the
+            # setter's line means the save was read and its level was overridden by the player's setting
+            logged = re.search(r"the game sets the music level \d+ \(ra=0x3add90\): the player's 32", f.read()) is not None
+        self.ok("a save load keeps the player's levels", logged and s.get("music") == "32" and s.get("effects") == "64",
+                "%s, load %s" % (s, "seen" if logged else "not seen"))
         # the pause menu's Audio page shows them (2 and 4 bars) and its slider changes the setting
-        self.keys("Return@3", "Down@2", "Right@2")
+        self.keys("%s@3" % rig.START_KEY, "Down@2", "Right@2")
         self.shot("game_audio_page")
         self.keys("Shift@2", "Left@2")
         s = self.sound()
@@ -169,7 +183,10 @@ class Check:
         self.ok("mouse turns the camera on foot", mode == 4 and abs(turn + 0.75) < 0.03 and abs(up - 0.225) < 0.02,
                 "mode %d heading %+.3f pitch %+.3f" % (mode, turn, up))
         # up / down at once as left / right: 120 counts up are +0.3 two frames later (through the stick's top speed and
-        # the game's easing it was under 0.06) and stay there
+        # the game's easing it was under 0.06) and stay there. Start from the camera's bottom limit (a large downward
+        # move clamps there on any platform and any indoors / outdoors table) so the 0.3 has room
+        g.cmd("mouse 0 600")
+        g.wait_frames(30)
         _, p0, _ = self.cam()
         g.cmd("mouse 0 -120")
         g.wait_frames(2)
@@ -188,12 +205,12 @@ class Check:
         turn, up = self.mouse_moves(10, 20, 5)
         self.setting("mouse.camera", 1)
         self.ok("mouse camera off", abs(turn) < 0.005 and abs(up) < 0.005, "heading %+.3f pitch %+.3f" % (turn, up))
-        self.keys("Return@3")  # the game's pause menu: the camera stays
+        self.keys("%s@3" % rig.START_KEY)  # the game's pause menu: the camera stays
         _, _, h0 = self.cam()
         g.cmd("mouse 400 0")
         time.sleep(1.0)
         _, _, h1 = self.cam()
-        self.keys("Return@3")
+        self.keys("%s@3" % rig.START_KEY)
         self.ok("the mouse leaves the camera in the pause menu", abs(h1 - h0) < 0.001, "heading %.3f -> %.3f" % (h0, h1))
 
         # right click locks on to a ped next to Vic (the game's lock-on camera, mode 11), and the mouse does not break it
@@ -426,7 +443,7 @@ class Check:
         dh = (self.cam()[2] - b0 + math.pi) % (2 * math.pi) - math.pi
         fov0 = g.peekf(self.CAM + 0x134, 1)[0]
         g.cmd("press wheelup 50")
-        time.sleep(0.2)
+        g.wait_frames(5)
         g.cmd("press wheelup 50")
         time.sleep(1.5)
         fov1 = g.peekf(self.CAM + 0x134, 1)[0]
@@ -735,6 +752,7 @@ class Check:
         g = self.g = rig.Game.start(save=os.path.join(ROOT, "build", "rig", "saves", "fortbaxter"), name="controls_check",
                                     port=self.port, data_dir=os.path.join(ROOT, "build", "controls", "data"),
                                     env={"VCS_FPS": "30", "VCS_TIMING": "",  # timing unlocked: the presets set it
+                                         "VCS_VOLUME": "", "VCS_MOVIE_VOLUME": "",  # the Audio page sets them
                                          "VCS_SCREENSHOT_DIR": os.path.join(self.out, "screenshot_key")})
         try:
             g.wait_ingame()
@@ -808,7 +826,7 @@ class Check:
             self.setting("advanced.reset_all")
             got = {k: self.setting(k) for k in ("keys.cross", "audio.volume", "pad.vibration", "controls.menu_key")}
             self.ok("Reset all settings", got == {"keys.cross": str(KEY_SHIFT), "audio.volume": "100", "pad.vibration": "100",
-                                                  "controls.menu_key": str(KEY_F2)}, str(got))
+                                                  "controls.menu_key": str(MENU_KEY_DEFAULT)}, str(got))
             p = self.held("shift")
             self.ok("bindings after the reset", p["buttons"] == CROSS, str(p))
 

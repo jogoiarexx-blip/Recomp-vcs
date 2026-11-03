@@ -766,6 +766,52 @@ from them: Vic moves while free aiming exactly when he can move locked on with t
   them only while its own stick moves the dummy, so the host clamps). Asked, the user chose the gamepad's R1 firing
   there too (the same reach problem as the car): it fires in any free aim a script starts, and is R1 everywhere else.
 
+## 2026-10-31 - macOS arm64: ld64, no ThinLTO, sse2neon, MoltenVK
+
+The port to Apple Silicon keeps the Linux shape (SDL3 + the Vulkan RHI + clang) and solves four platform gaps:
+- **SSE**: the runtime and the generated code are written against SSE intrinsics. `third_party/PS2Recomp` already
+  fetched sse2neon for ARM (Vita/Android) and `ps2_runtime*.h`/`ps2_memory.h` switch on `USE_SSE2NEON`; the top-level
+  CMake defines it for `ps2EntryRunner` too, so `src/game` (`vcs_hle_world`, `vcs_rsl_world`) and `ps2_render_worker`
+  use the same header. sse2neon implements `_mm_setcsr`/`_mm_getcsr` rounding through FPCR, so the VU's round-to-zero
+  path survives.
+- **AVX2 vs NEON**: `ps2_vu1_compiled.h`'s `vu1v` 128-bit path is now compiled when `__AVX2__` *or* `USE_SSE2NEON` is
+  set; the parts that need 256-bit doubles (`fused`, `floatToInt`) keep the AVX2 code and get a per-lane fallback on
+  ARM, using the same `vu1fast::exactResult`. Results are bit-identical by construction.
+- **Linker/compiler**: Homebrew LLVM 23 compiles (`-mcpu=native`); ld64 links because lld 23 mis-links the current
+  SDK's Objective-C stubs (`objc_msgSendClass$...` unresolved) and ld64 cannot read LLVM 23 ThinLTO bitcode. ThinLTO
+  stays off on macOS until Apple clang (or a fixed lld) can carry it; `tools/build.py` defaults to `--opt none` there.
+- **Vulkan**: MoltenVK 1.4 is a Vulkan 1.3 portability implementation with dynamic rendering, synchronization2 and
+  push descriptors, so the RHI needs no feature changes - only `VK_KHR_portability_enumeration` at instance creation
+  and `VK_KHR_portability_subset` on the device. dlopen ignores rpaths, so the platform layer locates Homebrew's
+  loader and the RHI initialises volk from that handle (`VCS_VULKAN_LOADER` overrides).
+Details and numbers: docs/MACOS.md.
+
+## 2026-10-31 - macOS parity: launcher, profiler, PGO, platform menu keys
+
+- **Launcher**: not part of this port. 0.1.0 rewrote the Windows launcher as its own Win32/D3D11 app; a
+  macOS front end would need that UI layer portable first (the tools and `tools/package_mac.py` are enough meanwhile).
+- **Menu keys**: on Mac keyboards F2/F5 are the brightness and backlight keys, so the *defaults* of
+  `controls.menu_key` / `controls.trainer_key` are ` and \ on Apple platforms (`#if defined(__APPLE__)` in
+  vcs_input.cpp); F2/F5 keep working with Fn held (the UI also accepts them there). Both stay rebindable.
+- **Profiler**: `task_threads` + `pthread_kill(SIGPROF)`, PC from the ucontext (`__ss.__pc`), thread names via
+  `pthread_getname_np`, `dladdr` for symbols; hidden test runs block physical input, so pad and key checks use the
+  control channel or a visible run.
+- **PGO**: Apple clang's raw profiles are merged with Xcode's `llvm-profdata` (`tools/toolchain.py profdata_tool`);
+  Homebrew LLVM 23 refuses raw format 10. Training needs gameplay: `bench.py` requires a free-roam card, so a fresh
+  install trains from the trainer-driven runs.
+- **Build tooling**: Apple clang is the default compiler (ThinLTO works with ld64); `VCS_APPLE_CLANG=0` selects
+  Homebrew LLVM without LTO. macOS dependency check (`check_mac_deps`) accepts Apple clang without Homebrew LLVM.
+
+## 2026-10-31 - macOS: PC-style default keys (Start on Escape, Cross on Enter, Select on C)
+
+The first players on macOS asked for the PC conventions; the change is scoped to Apple platforms so Windows
+and Linux keep the defaults they had (Start = Enter, Select = Backspace, L3 = C): Start (the
+game's pause menu and the "skip movie" button) moves from Enter to Escape; Cross (confirm / sprint) gets Enter as a
+second key, so Enter confirms in the game's menus; Select (the camera distance toggle) moves from Backspace to C;
+L3 loses its C binding (it can be rebound). The scripts that drive the menus (tools/saves.py, trainer_check.py,
+scenes.py, controls_check.py) now open the pause menu with Escape and check Enter as Cross; CONTROLS.md and the
+settings help list the new defaults. F2/F5 keep their macOS alternates (` and \) for the same reason.
+
 ## 2026-11-01 - The launcher draws itself (docs/LAUNCHER.md)
 
 The user asked for the launcher to become a high-performance application with its own native UI and beautiful

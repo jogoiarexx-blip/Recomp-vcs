@@ -16,12 +16,19 @@
 #define NOMINMAX
 #include <windows.h>
 #include <dbghelp.h>
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 #include <dlfcn.h>
 #include <execinfo.h>
+#if defined(__APPLE__)
+#include <sys/ucontext.h> // ucontext.h itself needs _XOPEN_SOURCE on macOS
+#else
 #include <ucontext.h>
+#endif
 #include <unistd.h>
 #include <sys/syscall.h>
+#endif
+#if defined(__APPLE__)
+#include <pthread.h>
 #endif
 
 namespace vcs
@@ -105,7 +112,7 @@ namespace vcs
             printStack(info->ContextRecord);
             return EXCEPTION_CONTINUE_SEARCH;
         }
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
         // Frames as "module+0xoffset (symbol+0xoffset)", then one llvm-symbolizer line per module seen. Called from
         // signal handlers: no allocation; dladdr is not async-signal-safe in theory, but the process is ending anyway.
         void printStack(void *faultPc)
@@ -165,12 +172,20 @@ namespace vcs
                 _exit(128 + sig);
             inside = 1;
             const ucontext_t *uc = static_cast<const ucontext_t *>(context);
+#if defined(__APPLE__)
+            void *pc = uc ? reinterpret_cast<void *>(uc->uc_mcontext->__ss.__pc) : nullptr;
+#else
             void *pc = uc ? reinterpret_cast<void *>(uc->uc_mcontext.gregs[REG_RIP]) : nullptr;
+#endif
             const char *name = sig == SIGSEGV ? "SIGSEGV" : sig == SIGBUS ? "SIGBUS" : sig == SIGILL ? "SIGILL" : sig == SIGFPE ? "SIGFPE" : "signal";
             std::fprintf(stderr, "[crash] %s at %p", name, pc);
             if ((sig == SIGSEGV || sig == SIGBUS) && info)
                 std::fprintf(stderr, " %s address %p", info->si_code == SEGV_ACCERR ? "no access to" : "bad", info->si_addr);
+#if defined(__APPLE__)
+            std::fprintf(stderr, " (thread %p)\n", static_cast<void *>(pthread_self()));
+#else
             std::fprintf(stderr, " (thread %ld)\n", static_cast<long>(syscall(SYS_gettid)));
+#endif
             printStack(pc);
             // the default action: the exit status (and a core dump where enabled) say what happened
             signal(sig, SIG_DFL);
@@ -198,7 +213,7 @@ namespace vcs
                 }
             }
             std::fprintf(stderr, "\n");
-#if defined(_WIN32) || defined(__linux__)
+#if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
             printStack(nullptr);
 #endif
             std::_Exit(3);
@@ -207,7 +222,7 @@ namespace vcs
         void onAbort(int)
         {
             std::fprintf(stderr, "[crash] abort()\n");
-#if defined(_WIN32) || defined(__linux__)
+#if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
             printStack(nullptr);
 #endif
             std::_Exit(3);
@@ -224,7 +239,7 @@ namespace vcs
         _set_invalid_parameter_handler(&onInvalidParameter);
         if (std::getenv("VCS_CRASH_FIRST_CHANCE"))
             AddVectoredExceptionHandler(1, &onFirstChance);
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
         // the handler runs on its own stack, so a stack overflow is reported too (the main thread's; other threads
         // report on their own stack)
         static char altStack[64 * 1024];

@@ -41,6 +41,10 @@ def copy_card(src, dst):
         shutil.copytree(src, dst, copy_function=shutil.copy2)
 
 
+# the game's Start key (the pause menu): Escape on macOS (PC-style defaults there), Enter elsewhere
+START_KEY = "Escape" if sys.platform == "darwin" else "Return"
+
+
 class Scm:
     """Bytecode for the game's script VM (docs/game-internals.md section 11). Opcodes are the VCS numbers
     (Sanny Builder Library vcs.json, checked against the handler table); arguments carry a type byte."""
